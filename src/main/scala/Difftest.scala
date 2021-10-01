@@ -51,6 +51,7 @@ class DiffInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val valid    = Input(Bool())
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
+  val special  = Input(UInt(8.W))
   val skip     = Input(Bool())
   val isRVC    = Input(Bool())
   val scFailed = Input(Bool())
@@ -132,6 +133,12 @@ class DiffPtwEventIO extends DifftestBundle {
   val ptwData = Input(Vec(4, UInt(64.W)))
 }
 
+class DiffRefillEventIO extends DifftestBundle {
+  val valid = Input(Bool())
+  val addr  = Input(UInt(64.W))
+  val data  = Input(Vec(8, UInt(64.W)))
+}
+
 class DifftestArchEvent extends BlackBox {
   val io = IO(new DiffArchEventIO)
 }
@@ -174,6 +181,10 @@ class DifftestAtomicEvent extends BlackBox {
 
 class DifftestPtwEvent extends BlackBox {
   val io = IO(new DiffPtwEventIO)
+}
+
+class DifftestRefillEvent extends BlackBox {
+  val io = IO(new DiffRefillEventIO)
 }
 
 // Difftest emulator top

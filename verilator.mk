@@ -21,8 +21,9 @@ EMU_TOP      = SimTop
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)
 EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
 EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR)
-EMU_CXXFLAGS += -DVERILATOR -Wno-maybe-uninitialized  -DNUM_CORES=$(NUM_CORES)
-EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
+EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
+EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
+EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 
 EMU_VFILES    = $(SIM_VSRC)
 
@@ -78,6 +79,7 @@ endif
 # --trace
 VERILATOR_FLAGS =                   \
   --top-module $(EMU_TOP)           \
+  --compiler clang                  \
   +define+VERILATOR=1               \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
@@ -106,30 +108,19 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
 	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g' 
 
-LOCK = /var/emu/emu.lock
-LOCK_BIN = $(abspath $(BUILD_DIR)/lock-emu)
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
 build_emu_local: $(EMU_MK)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
-$(LOCK_BIN): ./scripts/utils/lock-emu.c
-	mkdir -p $(@D)
-	gcc $^ -o $@
-
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO) $(LOCK_BIN)
+$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO)
 ifeq ($(REMOTE),localhost)
 	$(MAKE) build_emu_local
 else
-	@echo "try to get emu.lock ..."
-	ssh -tt $(REMOTE) '$(LOCK_BIN) $(LOCK)'
-	@echo "get lock"
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); export NEMU_HOME=$(NEMU_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
-	@echo "release lock ..."
-	ssh -tt $(REMOTE) 'rm -f $(LOCK)'
 endif
 
 # log will only be printed when (B<=GTimer<=E) && (L < loglevel)
